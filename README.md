@@ -8,6 +8,8 @@ Kalirad & Sommer, _The role of plasticity and stochasticity in coexistence_
 
 + worm_pop.py: The _PriPOP_ model written in Python 3.8.
 
++ bayesian_analyses.ipynb: Jupyter notebook to analyse experiemntal data on mouth-form and fecundity data using a Bayesian approach.
+
 + sim_inputs.zip: the synthetic mouth-form and fecudnity data, based on the experimental data from _Pristionchus pacificus_, used by _PriPOP_ model.
 
 + MF_ratios.csv: the experiemntal mesuremnts of mouth-form plasticity for strains A, B, and C across two bacterial diets.
