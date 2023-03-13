@@ -2,7 +2,7 @@
 
 Data and code associated with:
 
-Kalirad & Sommer, _The role of plasticity and stochasticity in coexistenceـ
+Kalirad & Sommer, _The role of plasticity and stochasticity in coexistence_
 
 ## Contents:
 
