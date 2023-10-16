@@ -4,7 +4,7 @@ A individual-based model of P. pacificus development and population dynamics.
 
 __author__ = 'Ata Kalirad'
 
-__version__ = '1.1'
+__version__ = '1.0'
 
 import numpy as np
 import random as rnd
@@ -14,8 +14,6 @@ import uuid
 import pickle
 from tqdm import tqdm 
 from itertools import cycle
-
-# set random number generator seed
 
 states = ('E', 'J', 'J2A', 'A', 'dead', 'dauer')
 
@@ -34,6 +32,17 @@ fec_data_nv = {i[:-4]: pd.read_csv('./sim_inputs/'+i, index_col=0) for i in file
 MF_data = {i:list(pd.read_csv('./sim_inputs/MF_'+i+'.csv', index_col=0).iloc[:,0]) for i in ['P_OP50', 'MP_OP50', 'P_Novo', 'MP_Novo']}
     
 def sigmoid(x, state, strain, diet):
+    """_summary_
+
+    Args:
+        x (int): current age of the worm
+        state (str): current state of 
+        strain (str): strain of the worm
+        diet (str): current diet
+
+    Returns:
+        float : transition probability
+    """
     L = 1
     k = 0.7
     if state == 'E':
@@ -53,60 +62,24 @@ def sigmoid(x, state, strain, diet):
         x0 = 1000
     return np.divide(L, 1 + np.exp(-1*k*(x - x0)))
 
-# Metapop functions
-def create_neighbor_dict(line_length, ring=False):
-    neighbor_dict = {}
-    for i in range(line_length):
-        neighbors = []
-        # Add the left neighbor (if it exists)
-        if i > 0:
-            neighbors.append(i - 1)
-        elif ring:
-            neighbors.append(line_length - 1)  # Wrap around to the last location
-        # Add the right neighbor (if it exists)
-        if i < line_length - 1:
-            neighbors.append(i + 1)
-        elif ring:
-            neighbors.append(0)  # Wrap around to the first location
-        neighbor_dict[i] = neighbors
-    return neighbor_dict
-
-def assign_items_to_neighbors(items, neighbors, curr):
-    if len(neighbors) == 1:
-        # If there is only one neighbor, assign all items to that neighbor
-        assigned_items = []
-        neighbor = neighbors[0]
-        for item in items:
-            assigned_items.append((item, curr, neighbor))
-    elif len(neighbors) == 2:
-        # If there are two neighbors, randomly assign items to either neighbor
-        assigned_items = []
-        for item in items:
-            assigned_neighbor = rnd.choice(neighbors)
-            assigned_items.append((item, curr, assigned_neighbor))
-    else:
-        # Handle the case where there are more than two neighbors (customize as needed)
-        print("Cannot handle more than two neighbors.")
-        return None
-    return assigned_items
-
-def migration(possible, neighbours, mig_rate=0.5):
-    n_pop = len(neighbours.keys())
-    migrants = {}
-    for i in range(n_pop):
-        if len(possible[i]) > 0:
-            migrants_prob = np.random.binomial(1, mig_rate, size=len(possible[i]))
-            migrants_prob = np.where(migrants_prob==1)[0]
-            migrants[i] = [possible[i][j] for j in migrants_prob]
-    temp = []
-    for i in list(migrants.keys()):
-        temp += assign_items_to_neighbors(migrants[i], neighbours[i], i)
-    return temp
-# end of metapop functions
-
 class Population(object):
+    """Population object
+    """
     
     def __init__(self, dim, resource_type='OP50', rw_l=5, walk_bias=(1, 1), recog_par=0.95, pred_par=0.1, mig_rate=0.05, egg_var=True, loc_save=False):
+        """Initiali
+
+        Args:
+            dim (tuple): Dimensions of the lattice.
+            resource_type (str, optional): The bacterial diet. Defaults to 'OP50'.
+            rw_l (int, optional): Length of random walk at each step. Defaults to 5.
+            walk_bias (tuple, optional): Bias of the random walk. Defaults to (1, 1).
+            recog_par (float, optional): Fidelity of the self-recognition system. Defaults to 0.95.
+            pred_par (float, optional): Predation probability. Defaults to 0.1.
+            mig_rate (float, optional): Dauer larvae migration rate. Defaults to 0.05.
+            egg_var (bool, optional): Variation of fecundity. Defaults to True.
+            loc_save (bool, optional): Save the location of worms during the simulation. Defaults to False.
+        """
         assert resource_type == 'OP50' or 'Novo'
         self.index = [(i,j) for i in range(dim[0]) for j in range(dim[1])]
         self.n_loc = len(self.index)
@@ -124,7 +97,6 @@ class Population(object):
         self.rw_l=rw_l
         self.walk_bias = walk_bias
         self.recog_par = recog_par
-        ######
         self.n_spots_t = []
         self.maternity_dic = {}
         if pred_par > 0:
@@ -140,18 +112,43 @@ class Population(object):
         
     @property 
     def empty_loc_top(self):
+        """Empty locations on the top lattice.
+
+        Returns:
+            set
+        """
         return set(self.index).difference(self.top_layer.keys())
     
     @property
     def empty_loc_middle(self):
+        """Empty locations on the middle lattice.
+
+        Returns:
+            set
+        """
         return set(self.index).difference(self.middle_layer.keys())
         
     @property
     def empty_loc_bottom(self):
+        """Empty locations on the bottom lattice.
+
+        Returns:
+            set
+        """
         return set(self.index).difference(self.bottom_layer.keys())
 
 
     def random_walk_2d(self, loc, empty_spots, pot_prey_spots=False):
+        """Simple random walk algorithm
+
+        Args:
+            loc (tuple): Current location of the worm.
+            empty_spots (list): Available spots on the lattice.
+            pot_prey_spots (bool, optional): List of preys in the population. Defaults to False.
+
+        Returns:
+            list: The trajectory of the random walk.
+        """
         step_taken = 0
         trajectory = []
         curr_loc = loc
@@ -175,16 +172,16 @@ class Population(object):
         return trajectory
     
     def move_worms(self):
+        """Move juvenile and adult worms and trace killing events.
+        """
         curr_pos_top = [*self.top_layer]
         curr_pos_mid = [(k[0], k[1], 'mid') for i, (k,v) in enumerate(self.middle_layer.items()) if v[0] == 'J']
         mixed_pos = curr_pos_top + curr_pos_mid
         J2A = [k for i, (k,v) in enumerate(self.bottom_layer.items()) if v[0] == 'J2A']
         rnd.shuffle(mixed_pos)
         for worm in mixed_pos:
-            #print(worm)
             if len(worm) == 3 and (worm[0], worm[1]) in self.middle_layer:
                     trajectory = self.random_walk_2d((worm[0], worm[1]), self.empty_loc_middle)
-                    #print(trajectory)
                     new_pos = trajectory[-1]
                     if new_pos != (worm[0], worm[1]):
                         self.middle_layer[new_pos] = self.middle_layer[(worm[0], worm[1])]
@@ -197,18 +194,14 @@ class Population(object):
                     pre_adult_spots = J_D + J2A
                     trajectory = self.random_walk_2d(worm, self.empty_loc_top, pre_adult_spots)
                 new_pos = trajectory[-1]
-                #print(trajectory)
                 if new_pos != worm:
                     self.top_layer[new_pos] = self.top_layer[worm]
                     del self.top_layer[worm]
                 if self.pred and self.top_layer[new_pos][3]=='EU':
                     pot_preys = {**{(k, 'bottom'):v[2] for i, (k,v) in enumerate(self.bottom_layer.items()) if k in set(trajectory) and v[0] == 'J2A'}, **{(k, 'middle'):v[2] for i, (k,v) in enumerate(self.middle_layer.items()) if k in set(trajectory)}}
-                    #print(pot_preys)
                     recognized_prob = np.random.binomial(1, self.recog_par, size=len(pot_preys))
                     recognized = {k:(v if recognized_prob[i] else 'MC') for i, (k,v) in enumerate(pot_preys.items())}
-                    #print(recognized)
                     preys = [k for i, (k,v) in enumerate(recognized.items()) if v!= self.top_layer[new_pos][2] or v=='MC']
-                    #print(preys)
                     if len(preys) > 0:
                         killed = np.random.binomial(1, self.pred_par, size=len(preys))
                         killed = np.where(killed==1)[0]
@@ -221,31 +214,28 @@ class Population(object):
                                     J2A.remove(preys[i][0])
                                     
     def transfer_layers(self, top, mid, bottom):
+        """Replace population lattices
+
+        Args:
+            top (dict)
+            mid (dict)
+            bottom (dict)
+        """
         self.top_layer = top
         self.middle_layer = mid
         self.bottom_layer = bottom
-    
-    def add_dauer(self, worm, always_eu=False):
-        spots_top = list(self.empty_loc_top)
-        if len(spots_top) > 0:
-            worm_mf = 'ST'
-            if always_eu or worm[2] == 'NP':
-                worm_mf = 'EU'
-            else:
-                eu_mf_prob = np.random.choice(MF_data[worm[2] + '_' + self.resource_type])
-                eu_mf = np.random.binomial(1, eu_mf_prob)
-                if eu_mf:
-                    worm_mf = 'EU'
-            worm = ('A', 0, worm[2], worm_mf, worm[4])
-            rand_pos =  np.random.choice(range(len(spots_top)))
-            self.top_layer[spots_top[rand_pos]] = worm
         
     def add_worm(self, worm):
+        """Add worm to the population
+
+        Args:
+            worm (tuple)
+        """
         if not worm[4]:
             worm = (worm[0], worm[1], worm[2], worm[3], str(uuid.uuid4()))
-        spots_top = list(self.empty_loc_top)
-        spots_middle = list(self.empty_loc_middle)
-        spots_bottom = list(self.empty_loc_bottom)
+        spots_top = list(set(self.index).difference(self.top_layer.keys()))
+        spots_middle = list(set(self.index).difference(self.middle_layer.keys()))
+        spots_bottom = list(set(self.index).difference(self.bottom_layer.keys()))
         if worm[0] == 'E' or worm[0] == 'J2A':
             if len(spots_bottom) > 0:
                 rand_pos =  np.random.choice(range(len(spots_bottom)))
@@ -271,6 +261,11 @@ class Population(object):
                     self.top_layer[spots_top[rand_pos]] = worm
         
     def lay_eggs(self, age_lim=120):
+        """Lay eggs according to the fecundity model
+
+        Args:
+            age_lim (int, optional): The maximum age of egg-laying for an adult. Defaults to 120.
+        """
         pot_mothers = [k for i, (k,v) in enumerate(self.top_layer.items()) if v[1] < age_lim]
         egg_laying_spots = {k:list(set(self.moore_neighbor[k]).intersection(self.empty_loc_bottom)) for k in pot_mothers}
         mothers = {k:v for i, (k,v) in enumerate(egg_laying_spots.items()) if len(v) > 0}
@@ -362,6 +357,8 @@ class Population(object):
                     self.bottom_layer[i] = (next_state, 0, self.bottom_layer[i][2], self.bottom_layer[i][3], self.bottom_layer[i][4])
                                     
     def migrate_dauer(self):
+        """Move dauer larvae according to the migration probability
+        """
         P_migrants = 0
         NP_migrants = 0
         MP_migrants = 0
@@ -383,6 +380,8 @@ class Population(object):
         self.dauer_migrated['MP'].append(MP_migrants)
         
     def age_pop(self):
+        """Increase the age of worms in the population by one
+        """
         for i, (k, v) in enumerate(self.top_layer.items()):
             if v[0] != 'dead':
                 self.top_layer[k] = (v[0], v[1]+1, v[2], v[3], v[4])
@@ -393,6 +392,8 @@ class Population(object):
             self.bottom_layer[k] = (v[0], v[1]+1, v[2], v[3], v[4])
     
     def take_a_step(self):
+        """Take a single step of the simulations
+        """
         # remove dead worms
         self.funerary += [k for i, (k,v)  in enumerate(self.top_layer.items()) if v[0] == 'dead']
         self.funerary_J2A_arrest += [k for i, (k,v)  in enumerate(self.bottom_layer.items()) if v[0] == 'dead']
@@ -407,6 +408,8 @@ class Population(object):
         self.age_pop()
         
     def init_history(self):
+        """Initialize the history dictionary 
+        """
         self.history = {'NP':{}, 'MP':{}, 'P':{}}
         for i in self.history.keys():
             self.history[i]['E'] = []
@@ -428,6 +431,8 @@ class Population(object):
                 self.loc_history[i]['J2A_locs'] = []
         
     def update_history(self):  
+        """Update the history dictionary
+        """
         for strain in self.history.keys(): 
             self.history[strain]['E'].append(len([i for i, (k,v) in enumerate(self.bottom_layer.items()) if v[2] == strain]))
             self.history[strain]['J'].append(len([i for i, (k,v) in enumerate(self.middle_layer.items()) if (v[0] == 'J' and v[2] == strain)]))
@@ -493,6 +498,12 @@ class Population(object):
                 file.close()
         
     def simulate(self, t, verbose=False):
+        """Simulate the population model
+
+        Args:
+            t (int): The length of the simulation.
+            verbose (bool, optional): If True, shows a progress bar using tqdm library. Defaults to False.
+        """
         self.init_history()
         self.update_history()
         for i in tqdm(range(t), disable=not verbose):
