@@ -2,7 +2,7 @@
 
 Data and code associated with:
 
-Kalirad & Sommer, _The role of plasticity and stochasticity in coexistence_
+Kalirad A, Sommer RJ. _The role of plasticity and stochasticity in coexistence._ Ecol Lett. 2024 Feb;27(2):e14370. doi: 10.1111/ele.14370. PMID: 38348631.
 
 ## Contents:
 
